@@ -43,6 +43,48 @@ def _grid_to_pil_highlighted(grid, steps_data, step_idx, cell_px=10):
     return PILImage.fromarray(arr, "RGB")
 
 
+def _grid_to_pil_coord(grid: list[list[dict]], cell_px: int = 12, label_px: int = 20) -> PILImage.Image:
+    """Render grid as PIL image with row/col number labels along the edges."""
+    from PIL import ImageDraw, ImageFont
+    h = len(grid)
+    w = len(grid[0]) if h > 0 else 0
+
+    img_w = label_px + w * cell_px
+    img_h = label_px + h * cell_px
+    img = PILImage.new("RGB", (img_w, img_h), (240, 240, 240))
+    draw = ImageDraw.Draw(img)
+
+    # Try to load a small font; fall back to default
+    try:
+        font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", size=max(8, cell_px - 2))
+    except Exception:
+        font = ImageFont.load_default()
+
+    # Draw bead cells
+    for ri, row in enumerate(grid):
+        for ci, cell in enumerate(row):
+            x0 = label_px + ci * cell_px
+            y0 = label_px + ri * cell_px
+            draw.rectangle([x0, y0, x0 + cell_px - 1, y0 + cell_px - 1],
+                           fill=(cell["r"], cell["g"], cell["b"]))
+
+    # Column numbers (every 5th column to avoid crowding)
+    col_step = max(1, round(5 * 6 / cell_px))  # label every ~5 cells at default size
+    for ci in range(w):
+        if (ci + 1) % col_step == 0 or ci == 0:
+            x = label_px + ci * cell_px + cell_px // 2
+            draw.text((x, 2), str(ci + 1), fill=(80, 80, 80), font=font, anchor="mt")
+
+    # Row numbers (every 5th row)
+    row_step = max(1, round(5 * 6 / cell_px))
+    for ri in range(h):
+        if (ri + 1) % row_step == 0 or ri == 0:
+            y = label_px + ri * cell_px + cell_px // 2
+            draw.text((label_px - 2, y), str(ri + 1), fill=(80, 80, 80), font=font, anchor="rm")
+
+    return img
+
+
 def export_pdf(
     grid: list[list[dict]],
     bead_list: list[dict],
@@ -106,35 +148,23 @@ def export_pdf(
     # --- Page 3+: Coordinate Grid ---
     story.append(Paragraph("Coordinate Grid", h2_style))
     story.append(Paragraph(
-        "Each cell shows its column number. Rows are numbered on the left.",
+        "Row numbers on the left, column numbers on the top. Labels shown every 5 cells.",
         normal
     ))
     story.append(Spacer(1, 3*mm))
 
-    cell_size = max(4*mm, min(6*mm, 160*mm / grid_w))
-    coord_data = [[""] + [str(c+1) for c in range(grid_w)]]
-    for ri, row in enumerate(grid):
-        row_data = [str(ri+1)]
-        for cell in row:
-            row_data.append(
-                Paragraph(
-                    f'<font color="#{cell["r"]:02x}{cell["g"]:02x}{cell["b"]:02x}">■</font>',
-                    center_style
-                )
-            )
-        coord_data.append(row_data)
-
-    coord_table = Table(coord_data, colWidths=[8*mm] + [cell_size]*grid_w)
-    coord_style = [
-        ("FONTSIZE",  (0, 0), (-1, -1), 6),
-        ("ALIGN",     (0, 0), (-1, -1), "CENTER"),
-        ("VALIGN",    (0, 0), (-1, -1), "MIDDLE"),
-        ("GRID",      (0, 0), (-1, -1), 0.3, colors.HexColor("#DDDDDD")),
-        ("BACKGROUND",(0, 0), (-1, 0),  colors.HexColor("#E8E8E8")),
-        ("BACKGROUND",(0, 0), (0, -1),  colors.HexColor("#E8E8E8")),
-    ]
-    coord_table.setStyle(TableStyle(coord_style))
-    story.append(coord_table)
+    # Choose cell_px so the grid fits within 160mm wide
+    max_grid_px = int(160 * 3.7795)  # ~604px for 160mm at 96dpi equivalent
+    label_px = 20
+    cell_px = max(4, min(14, (max_grid_px - label_px) // grid_w))
+    coord_pil = _grid_to_pil_coord(grid, cell_px=cell_px, label_px=label_px)
+    cbuf = io.BytesIO()
+    coord_pil.save(cbuf, format="PNG")
+    cbuf.seek(0)
+    cw, ch = coord_pil.size
+    # Scale to fit page width (160mm)
+    coord_scale = min(160*mm / cw, 250*mm / ch)
+    story.append(RLImage(cbuf, width=cw * coord_scale, height=ch * coord_scale))
 
     # --- Step Pages ---
     story.append(Paragraph("Step-by-Step Guide", h2_style))
