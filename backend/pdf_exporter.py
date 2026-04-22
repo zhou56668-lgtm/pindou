@@ -43,20 +43,20 @@ def _grid_to_pil_highlighted(grid, steps_data, step_idx, cell_px=10):
     return PILImage.fromarray(arr, "RGB")
 
 
-def _grid_to_pil_coord(grid: list[list[dict]], cell_px: int = 12, label_px: int = 20) -> PILImage.Image:
-    """Render grid as PIL image with row/col number labels along the edges."""
+def _grid_to_pil_coord(grid: list[list[dict]], cell_px: int = 12, label_px: int = 28) -> PILImage.Image:
+    """Render grid as PIL image with grid lines and row/col number labels."""
     from PIL import ImageDraw, ImageFont
     h = len(grid)
     w = len(grid[0]) if h > 0 else 0
 
     img_w = label_px + w * cell_px
     img_h = label_px + h * cell_px
-    img = PILImage.new("RGB", (img_w, img_h), (240, 240, 240))
+    img = PILImage.new("RGB", (img_w, img_h), (255, 255, 255))
     draw = ImageDraw.Draw(img)
 
-    # Try to load a small font; fall back to default
+    font_size = max(7, min(10, cell_px - 1))
     try:
-        font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", size=max(8, cell_px - 2))
+        font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", size=font_size)
     except Exception:
         font = ImageFont.load_default()
 
@@ -68,19 +68,30 @@ def _grid_to_pil_coord(grid: list[list[dict]], cell_px: int = 12, label_px: int 
             draw.rectangle([x0, y0, x0 + cell_px - 1, y0 + cell_px - 1],
                            fill=(cell["r"], cell["g"], cell["b"]))
 
-    # Column numbers (every 5th column to avoid crowding)
-    col_step = max(1, round(5 * 6 / cell_px))  # label every ~5 cells at default size
-    for ci in range(w):
-        if (ci + 1) % col_step == 0 or ci == 0:
-            x = label_px + ci * cell_px + cell_px // 2
-            draw.text((x, 2), str(ci + 1), fill=(80, 80, 80), font=font, anchor="mt")
+    # Draw grid lines — every cell if cell_px >= 6, else every 5 cells
+    line_step = 1 if cell_px >= 6 else 5
+    line_color = (120, 120, 120)
+    for ci in range(0, w + 1, line_step):
+        x = label_px + ci * cell_px
+        draw.line([(x, label_px), (x, label_px + h * cell_px)], fill=line_color, width=1)
+    for ri in range(0, h + 1, line_step):
+        y = label_px + ri * cell_px
+        draw.line([(label_px, y), (label_px + w * cell_px, y)], fill=line_color, width=1)
 
-    # Row numbers (every 5th row)
-    row_step = max(1, round(5 * 6 / cell_px))
+    # Column numbers every num_step cells
+    num_step = max(1, round(5 * 6 / cell_px))
+    for ci in range(w):
+        if ci == 0 or (ci + 1) % num_step == 0:
+            x = label_px + ci * cell_px + cell_px // 2
+            y = label_px // 2
+            draw.text((x, y), str(ci + 1), fill=(40, 40, 40), font=font, anchor="mm")
+
+    # Row numbers every num_step rows
     for ri in range(h):
-        if (ri + 1) % row_step == 0 or ri == 0:
+        if ri == 0 or (ri + 1) % num_step == 0:
+            x = label_px // 2
             y = label_px + ri * cell_px + cell_px // 2
-            draw.text((label_px - 2, y), str(ri + 1), fill=(80, 80, 80), font=font, anchor="rm")
+            draw.text((x, y), str(ri + 1), fill=(40, 40, 40), font=font, anchor="mm")
 
     return img
 
