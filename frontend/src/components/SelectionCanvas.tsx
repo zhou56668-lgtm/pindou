@@ -16,10 +16,12 @@ interface Rect {
 export default function SelectionCanvas({ imageUrl, onCropChange }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const [start, setStart] = useState<{ x: number; y: number } | null>(null);
-  const [rect, setRect] = useState<Rect | null>(null);
-  // Scale from canvas coords to original image coords
+  // Use refs for all drag state — avoids stale closures in event handlers
+  const draggingRef = useRef(false);
+  const startRef = useRef<{ x: number; y: number } | null>(null);
+  const rectRef = useRef<Rect | null>(null);
+  // State only for triggering re-render of the "Clear" button
+  const [hasRect, setHasRect] = useState(false);
   const scaleRef = useRef({ sx: 1, sy: 1 });
 
   const draw = useCallback((selection: Rect | null) => {
@@ -29,7 +31,6 @@ export default function SelectionCanvas({ imageUrl, onCropChange }: Props) {
     const ctx = canvas.getContext("2d")!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
     if (selection) {
       ctx.strokeStyle = "#4A90D9";
       ctx.lineWidth = 2;
@@ -47,7 +48,6 @@ export default function SelectionCanvas({ imageUrl, onCropChange }: Props) {
       imgRef.current = img;
       const canvas = canvasRef.current;
       if (!canvas) return;
-      // Fit image into max 600px wide
       const maxW = 600;
       const scale = Math.min(1, maxW / img.naturalWidth);
       canvas.width = img.naturalWidth * scale;
@@ -59,56 +59,66 @@ export default function SelectionCanvas({ imageUrl, onCropChange }: Props) {
       draw(null);
     };
     img.src = imageUrl;
-    setRect(null);
+    rectRef.current = null;
+    setHasRect(false);
     onCropChange(null);
   }, [imageUrl, draw, onCropChange]);
 
-  const getPos = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Account for CSS display size vs canvas pixel size (e.g. when canvas is scaled by CSS)
+  const getPos = (e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } => {
     const canvas = canvasRef.current!;
     const r = canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    const scaleX = canvas.width / r.width;
+    const scaleY = canvas.height / r.height;
+    return {
+      x: (e.clientX - r.left) * scaleX,
+      y: (e.clientY - r.top) * scaleY,
+    };
   };
 
   const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const pos = getPos(e);
-    setStart(pos);
-    setDragging(true);
-    setRect(null);
+    draggingRef.current = true;
+    startRef.current = pos;
+    rectRef.current = null;
+    setHasRect(false);
     onCropChange(null);
+    draw(null);
   };
 
   const onMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!dragging || !start) return;
+    if (!draggingRef.current || !startRef.current) return;
     const pos = getPos(e);
+    const s = startRef.current;
     const r: Rect = {
-      x: Math.min(start.x, pos.x),
-      y: Math.min(start.y, pos.y),
-      w: Math.abs(pos.x - start.x),
-      h: Math.abs(pos.y - start.y),
+      x: Math.min(s.x, pos.x),
+      y: Math.min(s.y, pos.y),
+      w: Math.abs(pos.x - s.x),
+      h: Math.abs(pos.y - s.y),
     };
-    setRect(r);
+    rectRef.current = r;
     draw(r);
   };
 
   const onMouseUp = () => {
-    setDragging(false);
-    if (rect && rect.w > 5 && rect.h > 5) {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    const r = rectRef.current;
+    if (r && r.w > 5 && r.h > 5) {
+      setHasRect(true);
       const { sx, sy } = scaleRef.current;
-      onCropChange({
-        x: rect.x * sx,
-        y: rect.y * sy,
-        w: rect.w * sx,
-        h: rect.h * sy,
-      });
+      onCropChange({ x: r.x * sx, y: r.y * sy, w: r.w * sx, h: r.h * sy });
     } else {
-      setRect(null);
+      rectRef.current = null;
+      setHasRect(false);
       draw(null);
       onCropChange(null);
     }
   };
 
   const clearSelection = () => {
-    setRect(null);
+    rectRef.current = null;
+    setHasRect(false);
     draw(null);
     onCropChange(null);
   };
@@ -120,13 +130,13 @@ export default function SelectionCanvas({ imageUrl, onCropChange }: Props) {
       </p>
       <canvas
         ref={canvasRef}
-        style={{ cursor: "crosshair", border: "1px solid #ddd", borderRadius: 8, display: "block" }}
+        style={{ cursor: "crosshair", border: "1px solid #ddd", borderRadius: 8, display: "block", maxWidth: "100%" }}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
       />
-      {rect && (
+      {hasRect && (
         <button
           onClick={clearSelection}
           style={{ marginTop: 6, fontSize: 12, padding: "3px 10px", cursor: "pointer" }}

@@ -29,12 +29,18 @@ def process_image(
         x2, y2 = min(img.width, x + w), min(img.height, y + h)
         img = img.crop((x, y, x2, y2))
 
-    # ── 2. 预处理：模糊去噪 ───────────────────────────────────
+    # ── 1b. 根据图片实际宽高比重新计算 grid_h，避免拉伸变形 ──
+    grid_h = max(1, round(grid_w * img.height / img.width))
+
+    # ── 2. 预处理：等比放大 + 模糊去噪 ───────────────────────
     factor = 4
-    pre_w  = max(grid_w * factor, img.width)
-    pre_h  = max(grid_h * factor, img.height)
-    img    = img.resize((pre_w, pre_h), Image.LANCZOS)
-    blur_r = max(1.0, pre_w / grid_w * 0.5)
+    # 用统一缩放比，保持宽高比
+    scale = max(grid_w * factor / img.width, grid_h * factor / img.height)
+    if scale > 1.0:
+        pre_w = round(img.width * scale)
+        pre_h = round(img.height * scale)
+        img = img.resize((pre_w, pre_h), Image.LANCZOS)
+    blur_r = max(1.0, img.width / grid_w * 0.5)
     img    = img.filter(ImageFilter.GaussianBlur(radius=blur_r))
     img_small = img.resize((grid_w, grid_h), Image.LANCZOS)
 
