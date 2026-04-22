@@ -124,10 +124,3 @@ Each pixel is matched to the perceptually closest color using **CIELAB ΔE dista
 ## Team
 
 Ji Shuyu · Zhou Hongjie · Yan Boxiang · Xiao Yuchen · Xia Yutong · Zhang Hanxi
-Supervisor: Connor Hamilton
-
----
-
-## License
-
-MIT
