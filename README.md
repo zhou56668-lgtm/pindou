@@ -90,12 +90,12 @@ npm install
 npm run dev
 ```
 
-Frontend runs at: `http://localhost:5173`
+Frontend runs at: `http://localhost:xxxx`
 
 ### 4. Open in browser
 
 ```
-http://localhost:5173
+http://localhost:xxxx
 ```
 
 ---
