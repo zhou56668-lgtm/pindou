@@ -1,4 +1,4 @@
-# Creative PinDou 🎨
+# Creative PinDou
 
 A web application that converts any image into a printable **Perler / Hama bead pattern**.
 Upload an image → select a region → choose grid size → get a full color-coded pattern with PDF export.
